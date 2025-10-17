@@ -1,16 +1,26 @@
 {
   "version": 2,
   "name": "couple-sync-video",
-  "builds": [
-    {
-      "src": "index.html",
-      "use": "@vercel/static"
-    }
-  ],
+  "public": true,
+  "github": {
+    "enabled": false
+  },
+  "functions": {},
   "routes": [
     {
       "src": "/(.*)",
       "dest": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, must-revalidate"
+        }
+      ]
     }
   ],
   "env": {
