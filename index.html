@@ -1,0 +1,1733 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>情侣同步观影 - 共享美好时光</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Font Awesome -->
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  
+  <!-- Anime.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+  
+  <!-- Socket.io -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  
+  <!-- 字体 -->
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind 配置 -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#7C3AED',
+            secondary: '#F472B6',
+            dark: '#1F2937',
+            light: '#F3F4F6',
+            'primary-light': '#C4B5FD',
+            'secondary-light': '#FBCFE8',
+          },
+          fontFamily: {
+            sans: ['Noto Sans SC', 'sans-serif'],
+            display: ['ZCOOL KuaiLe', 'cursive'],
+          },
+          animation: {
+            'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+          }
+        }
+      }
+    }
+  </script>
+  
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .text-shadow {
+        text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      .text-shadow-lg {
+        text-shadow: 0 4px 8px rgba(0,0,0,0.25);
+      }
+      .backdrop-blur {
+        backdrop-filter: blur(8px);
+      }
+      .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+      }
+      .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      .glass-effect {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+    }
+  </style>
+  
+  <style>
+    body {
+      font-family: 'Noto Sans SC', sans-serif;
+      overflow-x: hidden;
+      touch-action: pan-y;
+      background-color: #0F172A;
+      color: #F3F4F6;
+    }
+    
+    .video-container {
+      position: relative;
+      width: 100%;
+      background-color: #000;
+      overflow: hidden;
+    }
+    
+    .video-container video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    
+    .video-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.5);
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+      pointer-events: none;
+    }
+    
+    .video-container.paused .video-overlay {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: all;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+    
+    .video-container.paused .video-overlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    
+    .play-button {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: rgba(124, 58, 237, 0.8);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      transition: transform 0.3s ease, background 0.3s ease;
+    }
+    
+    .play-button:hover {
+      transform: scale(1.1);
+      background: rgba(124, 58, 237, 1);
+    }
+    
+    .control-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+      padding: 20px 10px 10px;
+      transform: translateY(100%);
+      transition: transform 0.3s ease;
+    }
+    
+    .video-container:hover .control-bar,
+    .video-container.paused .control-bar,
+    .video-container.show-controls .control-bar {
+      transform: translateY(0);
+    }
+    
+    .progress-container {
+      position: relative;
+      width: 100%;
+      height: 6px;
+      background-color: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+      margin-bottom: 10px;
+      cursor: pointer;
+    }
+    
+    .progress-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      background-color: #7C3AED;
+      border-radius: 3px;
+      transition: width 0.1s linear;
+    }
+    
+    .partner-progress {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      background-color: rgba(244, 114, 182, 0.5);
+      border-radius: 3px;
+      z-index: 1;
+    }
+    
+    .progress-handle {
+      position: absolute;
+      top: 50%;
+      width: 16px;
+      height: 16px;
+      background-color: #7C3AED;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      z-index: 2;
+    }
+    
+    .progress-container:hover .progress-handle {
+      opacity: 1;
+    }
+    
+    .volume-slider {
+      width: 0;
+      height: 4px;
+      background-color: rgba(255, 255, 255, 0.2);
+      border-radius: 2px;
+      transition: width 0.3s ease;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .volume-container:hover .volume-slider {
+      width: 100px;
+    }
+    
+    .volume-progress {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      background-color: #fff;
+      border-radius: 2px;
+    }
+    
+    .panel {
+      position: fixed;
+      top: 0;
+      right: -100%;
+      width: 90%;
+      max-width: 400px;
+      height: 100%;
+      background-color: #1F2937;
+      z-index: 100;
+      transition: right 0.3s ease;
+      overflow-y: auto;
+      padding: 20px;
+      box-shadow: -5px 0 15px rgba(0, 0, 0, 0.3);
+    }
+    
+    .panel.open {
+      right: 0;
+    }
+    
+    .overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 90;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+    
+    .overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+    
+    .message {
+      max-width: 80%;
+      margin-bottom: 10px;
+      padding: 10px 15px;
+      border-radius: 18px;
+      line-height: 1.4;
+      animation: fadeIn 0.3s ease;
+    }
+    
+    .message.sent {
+      background-color: #7C3AED;
+      color: white;
+      margin-left: auto;
+      border-bottom-right-radius: 4px;
+    }
+    
+    .message.received {
+      background-color: #374151;
+      color: white;
+      margin-right: auto;
+      border-bottom-left-radius: 4px;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .emoji-button {
+      transition: transform 0.2s ease;
+    }
+    
+    .emoji-button:hover {
+      transform: scale(1.2);
+    }
+    
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background-color: rgba(31, 41, 55, 0.9);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      z-index: 1000;
+      transition: transform 0.3s ease;
+      backdrop-filter: blur(4px);
+    }
+    
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+    }
+    
+    .heart-animation {
+      position: absolute;
+      font-size: 24px;
+      color: #F472B6;
+      opacity: 0;
+      animation: heartFloat 1.5s ease-in-out;
+      pointer-events: none;
+    }
+    
+    /* 弹幕样式 */
+    .danmaku-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 10;
+    }
+    
+    .danmaku {
+      position: absolute;
+      white-space: nowrap;
+      color: white;
+      font-size: 20px;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+      padding: 4px 8px;
+      border-radius: 4px;
+      background-color: rgba(0, 0, 0, 0.3);
+      animation-timing-function: linear;
+      animation-fill-mode: forwards;
+      opacity: 0;
+    }
+    
+    @keyframes danmakuMove {
+      from { transform: translateX(100%); opacity: 1; }
+      to { transform: translateX(-100%); opacity: 1; }
+    }
+    
+    /* 上传进度条动画 */
+    @keyframes pulseProgress {
+      0% { background-color: #F472B6; }
+      50% { background-color: #FBCFE8; }
+      100% { background-color: #F472B6; }
+    }
+    
+    @keyframes heartFloat {
+      0% { opacity: 1; transform: translateY(0) scale(1); }
+      100% { opacity: 0; transform: translateY(-100px) scale(1.5); }
+    }
+    
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: #7C3AED;
+      animation: spin 1s ease-in-out infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .room-status {
+      background: linear-gradient(135deg, rgba(124, 58, 237, 0.8), rgba(244, 114, 182, 0.8));
+      backdrop-filter: blur(10px);
+    }
+    
+    .video-item {
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    
+    .video-item:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #7C3AED, #C4B5FD);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 15px -3px rgba(124, 58, 237, 0.3);
+    }
+    
+    .btn-secondary {
+      background: linear-gradient(135deg, #F472B6, #FBCFE8);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .btn-secondary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 15px -3px rgba(244, 114, 182, 0.3);
+    }
+    
+    .btn-outline {
+      border: 2px solid #7C3AED;
+      transition: all 0.2s ease;
+    }
+    
+    .btn-outline:hover {
+      background-color: #7C3AED;
+      color: white;
+    }
+    
+    /* 移动端适配 */
+    @media (max-width: 640px) {
+      .play-button {
+        width: 60px;
+        height: 60px;
+      }
+      
+      .control-bar {
+        padding: 15px 10px 5px;
+      }
+      
+      .panel {
+        width: 100%;
+        max-width: none;
+      }
+      
+      .message {
+        max-width: 90%;
+      }
+    }
+  </style>
+</head>
+<body class="bg-dark text-light">
+  <!-- 移动端加载动画 -->
+  <div id="mobileLoader" class="hidden fixed inset-0 z-50 bg-dark flex items-center justify-center">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- 应用标志 -->
+  <div class="fixed top-4 left-4 z-50 flex items-center space-x-2 bg-dark bg-opacity-80 p-2 rounded-lg backdrop-blur">
+    <img src="https://p3-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/rc/pc/super_tool/12061d1a647b4dc3b61daed93ee051a8~tplv-a9rns2rl98-image.image?rcl=2025101716201133F523E5A6B92AEA774F&rk3s=8e244e95&rrcfp=f06b921b&x-expires=1763281250&x-signature=%2F9SRCWGVZYuBZLZVw4kpqmUwQEg%3D" alt="情侣同步观影" class="w-8 h-8">
+    <h1 class="text-xl font-display text-white">情侣同步观影</h1>
+  </div>
+
+  <!-- 房间状态栏 -->
+  <div id="roomStatus" class="fixed top-0 left-0 right-0 z-40 room-status py-2 px-4 flex items-center justify-between opacity-0 transition-opacity 0.3s ease">
+    <div class="flex items-center">
+      <span class="text-sm mr-2">房间ID:</span>
+      <span id="roomId" class="font-medium">加载中...</span>
+    </div>
+    <div class="flex items-center">
+      <span id="connectionStatus" class="inline-block w-2 h-2 rounded-full bg-red-500 mr-2 animate-pulse"></span>
+      <span id="partnerStatus" class="text-sm">等待伴侣加入...</span>
+    </div>
+  </div>
+
+  <!-- 视频容器 -->
+  <div id="videoContainer" class="video-container h-screen flex items-center justify-center">
+    <video id="mainVideo" class="max-w-full max-h-full" playsinline>
+      <source src="" type="video/mp4">
+      您的浏览器不支持HTML5视频播放。
+    </video>
+    
+    <!-- 视频覆盖层 -->
+    <div class="video-overlay">
+      <div id="playButton" class="play-button mb-4">
+        <i class="fa fa-play text-white text-2xl"></i>
+      </div>
+      <div id="syncStatus" class="bg-dark bg-opacity-70 px-3 py-1 rounded-full text-sm flex items-center">
+        <i class="fa fa-refresh mr-1"></i>
+        <span>已同步</span>
+      </div>
+      <div class="mt-6 text-center text-white text-shadow-lg">
+        <p class="text-lg">单击播放/暂停</p>
+        <p class="text-sm mt-1">双击全屏</p>
+      </div>
+    </div>
+    
+    <!-- 弹幕容器 -->
+    <div id="danmakuContainer" class="absolute inset-0 pointer-events-none overflow-hidden"></div>
+    
+    <!-- 控制栏 -->
+    <div class="control-bar">
+      <div class="progress-container" id="progressContainer">
+        <div class="partner-progress" id="partnerProgress" style="width: 0%"></div>
+        <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+        <div class="progress-handle" id="progressHandle"></div>
+      </div>
+      
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-4">
+          <!-- 播放控制 -->
+          <div class="flex items-center space-x-3">
+            <button id="playPauseBtn" class="text-white hover:text-primary transition-colors">
+              <i class="fa fa-play"></i>
+            </button>
+            <span id="currentTime" class="text-white text-sm">00:00</span>
+            <span class="text-white text-sm">/</span>
+            <span id="duration" class="text-white text-sm">00:00</span>
+          </div>
+          
+          <!-- 音量控制 -->
+          <div class="flex items-center space-x-2">
+            <button id="muteBtn" class="text-white hover:text-primary transition-colors">
+              <i class="fa fa-volume-up"></i>
+            </button>
+            <div class="volume-container relative">
+              <div class="volume-slider">
+                <div class="volume-progress" id="volumeProgress" style="width: 100%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="flex items-center space-x-3">
+          <!-- 同步按钮 -->
+          <button id="syncBtn" class="text-white hover:text-primary transition-colors relative">
+            <i class="fa fa-refresh"></i>
+            <span class="absolute -top-2 -right-2 bg-secondary text-white text-xs rounded-full w-4 h-4 flex items-center justify-center hidden">0</span>
+          </button>
+          
+          <!-- 房间按钮 -->
+          <button id="roomBtn" class="text-white hover:text-primary transition-colors">
+            <i class="fa fa-users"></i>
+          </button>
+          
+          <!-- 弹幕按钮 -->
+          <button id="danmakuBtn" class="text-white hover:text-primary transition-colors relative">
+            <i class="fa fa-commenting-o"></i>
+          </button>
+          
+          <!-- 聊天按钮 -->
+          <button id="chatBtn" class="text-white hover:text-primary transition-colors relative">
+            <i class="fa fa-comment"></i>
+            <span class="absolute -top-2 -right-2 bg-secondary text-white text-xs rounded-full w-4 h-4 flex items-center justify-center hidden">0</span>
+          </button>
+          
+          <!-- 更多按钮 -->
+          <button id="moreBtn" class="text-white hover:text-primary transition-colors">
+            <i class="fa fa-ellipsis-v"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 更多功能面板 -->
+  <div id="morePanel" class="panel bg-dark">
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-xl font-bold text-white">更多功能</h2>
+      <button class="close-panel text-white hover:text-primary">
+        <i class="fa fa-times text-xl"></i>
+      </button>
+    </div>
+    
+    <div class="space-y-4">
+      <button id="fullscreenBtn" class="w-full flex items-center justify-between p-3 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors">
+        <span class="text-white">全屏模式</span>
+        <i class="fa fa-expand text-primary"></i>
+      </button>
+      
+      <button id="playlistBtn" class="w-full flex items-center justify-between p-3 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors">
+        <span class="text-white">视频列表</span>
+        <i class="fa fa-list text-primary"></i>
+      </button>
+      
+      <button id="settingsBtn" class="w-full flex items-center justify-between p-3 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors">
+        <span class="text-white">设置</span>
+        <i class="fa fa-cog text-primary"></i>
+      </button>
+      
+      <button id="helpBtn" class="w-full flex items-center justify-between p-3 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors">
+        <span class="text-white">帮助</span>
+        <i class="fa fa-question-circle text-primary"></i>
+      </button>
+      
+      <button id="leaveBtn" class="w-full flex items-center justify-center p-3 bg-red-600 rounded-lg hover:bg-red-700 transition-colors text-white">
+        <i class="fa fa-sign-out mr-2"></i>
+        <span>离开房间</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 房间管理面板 -->
+  <div id="roomPanel" class="panel bg-dark">
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-xl font-bold text-white">房间管理</h2>
+      <button class="close-panel text-white hover:text-primary">
+        <i class="fa fa-times text-xl"></i>
+      </button>
+    </div>
+    
+    <div class="space-y-6">
+      <!-- 创建/加入房间 -->
+      <div class="space-y-4">
+        <div class="flex space-x-2">
+          <button id="createRoomBtn" class="btn-primary flex-1 py-2 px-4 rounded-lg text-white font-medium">
+            创建房间
+          </button>
+          <button id="joinRoomBtn" class="btn-outline flex-1 py-2 px-4 rounded-lg text-white font-medium">
+            加入房间
+          </button>
+        </div>
+        
+        <div id="joinRoomForm" class="hidden space-y-3">
+          <div class="flex">
+            <input type="text" id="joinRoomId" placeholder="输入房间ID" class="flex-1 bg-gray-800 border border-gray-700 rounded-l-lg px-4 py-2 text-white focus:outline-none focus:border-primary">
+            <button id="confirmJoinBtn" class="bg-primary hover:bg-primary-light text-white px-4 py-2 rounded-r-lg transition-colors">
+              加入
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 房间信息 -->
+      <div class="bg-gray-800 p-4 rounded-lg">
+        <div class="flex justify-between items-center mb-3">
+          <h3 class="text-lg font-medium text-white">房间信息</h3>
+          <button id="shareRoomBtn" class="text-primary hover:text-primary-light transition-colors">
+            <i class="fa fa-share-alt"></i>
+          </button>
+        </div>
+        <div class="space-y-2 text-sm">
+          <div class="flex justify-between">
+            <span class="text-gray-400">房间ID:</span>
+            <span id="roomInfoId" class="text-white font-medium">--</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-400">创建时间:</span>
+            <span id="roomInfoTime" class="text-white">--</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-400">成员数量:</span>
+            <span id="roomInfoMembers" class="text-white">--</span>
+          </div>
+        </div>
+        
+        <!-- 分享链接弹窗 -->
+        <div id="shareModal" class="hidden mt-4 p-4 bg-gray-700 rounded-lg">
+          <div class="flex justify-between items-center mb-3">
+            <h4 class="text-white font-medium">分享房间</h4>
+            <button id="closeShareModal" class="text-gray-400 hover:text-white">
+              <i class="fa fa-times"></i>
+            </button>
+          </div>
+          <div class="flex">
+            <input type="text" id="roomShareLink" readonly class="flex-1 bg-gray-800 border border-gray-600 rounded-l-lg px-3 py-2 text-white text-sm focus:outline-none">
+            <button id="copyLinkBtn" class="bg-primary hover:bg-primary-light text-white px-4 py-2 rounded-r-lg transition-colors">
+              <i class="fa fa-copy"></i>
+            </button>
+          </div>
+          <p class="text-xs text-gray-400 mt-2">复制链接发送给伴侣</p>
+        </div>
+      </div>
+      
+      <!-- 成员列表 -->
+      <div class="bg-gray-800 p-4 rounded-lg">
+        <h3 class="text-lg font-medium text-white mb-3">房间成员</h3>
+        <div id="membersList" class="space-y-2">
+          <!-- 成员列表将在这里动态生成 -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 聊天面板 -->
+  <div id="chatPanel" class="panel bg-dark">
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-xl font-bold text-white">聊天</h2>
+      <button class="close-panel text-white hover:text-primary">
+        <i class="fa fa-times text-xl"></i>
+      </button>
+    </div>
+    
+    <div id="messagesContainer" class="flex-1 overflow-y-auto mb-4 space-y-2 h-96">
+      <!-- 消息将在这里动态生成 -->
+    </div>
+    
+    <div class="flex space-x-2">
+      <input type="text" id="messageInput" placeholder="输入消息..." class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary">
+      <button id="sendMessageBtn" class="bg-primary hover:bg-primary-light text-white px-4 py-2 rounded-lg transition-colors">
+        <i class="fa fa-send"></i>
+      </button>
+    </div>
+    
+    <!-- 快速表情 -->
+    <div class="flex justify-center space-x-2 mt-3">
+      <button class="emoji-button text-2xl hover:scale-110 transition-transform" data-emoji="❤️">❤️</button>
+      <button class="emoji-button text-2xl hover:scale-110 transition-transform" data-emoji="😘">😘</button>
+      <button class="emoji-button text-2xl hover:scale-110 transition-transform" data-emoji="😍">😍</button>
+      <button class="emoji-button text-2xl hover:scale-110 transition-transform" data-emoji="🥰">🥰</button>
+      <button class="emoji-button text-2xl hover:scale-110 transition-transform" data-emoji="😊">😊</button>
+      <button class="emoji-button text-2xl hover:scale-110 transition-transform" data-emoji="👍">👍</button>
+    </div>
+  </div>
+
+  <!-- 视频列表面板 -->
+  <div id="playlistPanel" class="panel bg-dark">
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-xl font-bold text-white">视频列表</h2>
+      <button class="close-panel text-white hover:text-primary">
+        <i class="fa fa-times text-xl"></i>
+      </button>
+    </div>
+    
+    <div class="space-y-4">
+      <!-- 添加视频 -->
+      <div class="bg-gray-800 p-4 rounded-lg">
+        <h3 class="text-white font-medium mb-3">添加视频</h3>
+        <div class="flex">
+          <input type="text" id="videoUrlInput" placeholder="输入视频URL (MP4格式)" class="flex-1 bg-gray-700 border border-gray-600 rounded-l-lg px-4 py-2 text-white focus:outline-none focus:border-primary">
+          <button id="addVideoBtn" class="bg-primary hover:bg-primary-light text-white px-4 py-2 rounded-r-lg transition-colors">
+            <i class="fa fa-plus"></i>
+          </button>
+        </div>
+      </div>
+      
+      <!-- 视频列表 -->
+      <div class="bg-gray-800 p-4 rounded-lg">
+        <h3 class="text-white font-medium mb-3">已添加的视频</h3>
+        <div id="videosList" class="space-y-3">
+          <!-- 视频列表将在这里动态生成 -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 设置面板 -->
+  <div id="settingsPanel" class="panel bg-dark">
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-xl font-bold text-white">设置</h2>
+      <button class="close-panel text-white hover:text-primary">
+        <i class="fa fa-times text-xl"></i>
+      </button>
+    </div>
+    
+    <div class="space-y-6">
+      <div class="bg-gray-800 p-4 rounded-lg">
+        <h3 class="text-white font-medium mb-3">播放设置</h3>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-white">自动播放</span>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="autoplaySetting" class="sr-only peer" checked>
+              <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-light rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+            </label>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-white">自动同步</span>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="autoSyncSetting" class="sr-only peer" checked>
+              <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-light rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+            </label>
+          </div>
+        </div>
+      </div>
+      
+      <div class="bg-gray-800 p-4 rounded-lg">
+        <h3 class="text-white font-medium mb-3">通知设置</h3>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-white">消息通知</span>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="messageNotificationSetting" class="sr-only peer" checked>
+              <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-light rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+            </label>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-white">同步通知</span>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="syncNotificationSetting" class="sr-only peer" checked>
+              <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-light rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+            </label>
+          </div>
+        </div>
+      </div>
+      
+      <div class="bg-gray-800 p-4 rounded-lg">
+        <h3 class="text-white font-medium mb-3">连接信息</h3>
+        <div class="space-y-2 text-sm">
+          <div class="flex justify-between">
+            <span class="text-gray-400">服务器状态:</span>
+            <span id="serverStatus" class="text-white">连接中...</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-400">延迟:</span>
+            <span id="connectionLatency" class="text-white">--ms</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 帮助面板 -->
+  <div id="helpPanel" class="panel bg-dark">
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-xl font-bold text-white">帮助</h2>
+      <button class="close-panel text-white hover:text-primary">
+        <i class="fa fa-times text-xl"></i>
+      </button>
+    </div>
+    
+    <div class="space-y-6">
+      <div class="bg-gray-800 p-4 rounded-lg">
+        <h3 class="text-white font-medium mb-3">如何使用</h3>
+        <div class="space-y-2 text-sm text-gray-300">
+          <p>1. 点击"创建房间"创建一个新的观影房间</p>
+          <p>2. 将房间ID或链接发送给你的伴侣</p>
+          <p>3. 伴侣加入后，你们可以同步观看视频</p>
+          <p>4. 使用聊天和弹幕功能进行互动</p>
+        </div>
+      </div>
+      
+      <div class="bg-gray-800 p-4 rounded-lg">
+        <h3 class="text-white font-medium mb-3">快捷键</h3>
+        <div class="space-y-2 text-sm text-gray-300">
+          <p><kbd class="bg-gray-700 px-2 py-1 rounded text-xs">空格</kbd> - 播放/暂停</p>
+          <p><kbd class="bg-gray-700 px-2 py-1 rounded text-xs">←/→</kbd> - 快退/快进</p>
+          <p><kbd class="bg-gray-700 px-2 py-1 rounded text-xs">↑/↓</kbd> - 音量调节</p>
+          <p><kbd class="bg-gray-700 px-2 py-1 rounded text-xs">F</kbd> - 全屏</p>
+        </div>
+      </div>
+      
+      <div class="bg-gray-800 p-4 rounded-lg">
+        <h3 class="text-white font-medium mb-3">常见问题</h3>
+        <div class="space-y-3 text-sm text-gray-300">
+          <div>
+            <p class="font-medium text-white">视频无法播放？</p>
+            <p>请确保视频链接是有效的MP4格式</p>
+          </div>
+          <div>
+            <p class="font-medium text-white">同步不准确？</p>
+            <p>检查网络连接，点击同步按钮重新同步</p>
+          </div>
+          <div>
+            <p class="font-medium text-white">伴侣无法加入？</p>
+            <p>确认房间ID正确，或重新创建房间</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 覆盖层 -->
+  <div id="overlay" class="overlay"></div>
+
+  <!-- 提示消息 -->
+  <div id="toast" class="toast"></div>
+
+  <!-- 爱心动画容器 -->
+  <div id="heartsContainer" class="fixed inset-0 pointer-events-none z-50"></div>
+
+  <script>
+    // 应用状态
+    const appState = {
+      socket: null,
+      roomId: null,
+      isHost: false,
+      userName: '',
+      partnerName: '',
+      partnerConnected: false,
+      isPlaying: false,
+      currentTime: 0,
+      duration: 0,
+      volume: 1,
+      isMuted: false,
+      isDanmakuEnabled: true,
+      messages: [],
+      videos: [],
+      unreadMessages: 0,
+      unreadSyncs: 0,
+      partnerProgress: 0,
+      partnerIsPlaying: false,
+      settings: {
+        autoplay: true,
+        autoSync: true,
+        messageNotification: true,
+        syncNotification: true
+      },
+      connectionLatency: 0
+    };
+
+    // DOM元素
+    const video = document.getElementById('mainVideo');
+    const videoContainer = document.getElementById('videoContainer');
+    const playButton = document.getElementById('playButton');
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const currentTimeSpan = document.getElementById('currentTime');
+    const durationSpan = document.getElementById('duration');
+    const progressBar = document.getElementById('progressBar');
+    const partnerProgress = document.getElementById('partnerProgress');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressHandle = document.getElementById('progressHandle');
+    const muteBtn = document.getElementById('muteBtn');
+    const volumeProgress = document.getElementById('volumeProgress');
+    const roomStatus = document.getElementById('roomStatus');
+    const roomId = document.getElementById('roomId');
+    const connectionStatus = document.getElementById('connectionStatus');
+    const partnerStatus = document.getElementById('partnerStatus');
+    const syncBtn = document.getElementById('syncBtn');
+    const roomBtn = document.getElementById('roomBtn');
+    const danmakuBtn = document.getElementById('danmakuBtn');
+    const chatBtn = document.getElementById('chatBtn');
+    const moreBtn = document.getElementById('moreBtn');
+    const morePanel = document.getElementById('morePanel');
+    const roomPanel = document.getElementById('roomPanel');
+    const chatPanel = document.getElementById('chatPanel');
+    const playlistPanel = document.getElementById('playlistPanel');
+    const settingsPanel = document.getElementById('settingsPanel');
+    const helpPanel = document.getElementById('helpPanel');
+    const overlay = document.getElementById('overlay');
+    const messagesContainer = document.getElementById('messagesContainer');
+    const messageInput = document.getElementById('messageInput');
+    const sendMessageBtn = document.getElementById('sendMessageBtn');
+    const danmakuContainer = document.getElementById('danmakuContainer');
+    const heartsContainer = document.getElementById('heartsContainer');
+    const mobileLoader = document.getElementById('mobileLoader');
+
+    // 后端服务器配置
+    const SERVER_URL = window.location.hostname === 'localhost' 
+      ? 'http://localhost:3001' 
+      : 'https://your-backend-app.onrender.com'; // 替换为你的Render后端URL
+
+    // 初始化Socket连接
+    function initSocket() {
+      appState.socket = io(SERVER_URL);
+
+      // 连接成功
+      appState.socket.on('connect', () => {
+        console.log('连接到服务器');
+        updateConnectionStatus('已连接', 'green');
+        appState.connectionLatency = Date.now();
+      });
+
+      // 连接断开
+      appState.socket.on('disconnect', () => {
+        console.log('与服务器断开连接');
+        updateConnectionStatus('已断开', 'red');
+        appState.partnerConnected = false;
+        updateRoomStatus();
+      });
+
+      // 延迟测试
+      appState.socket.on('pong', (latency) => {
+        appState.connectionLatency = latency;
+        document.getElementById('connectionLatency').textContent = `${latency}ms`;
+      });
+
+      // 房间创建成功
+      appState.socket.on('room-created', (data) => {
+        console.log('房间创建成功:', data);
+        appState.roomId = data.roomId;
+        appState.isHost = true;
+        appState.userName = '用户1';
+        
+        updateRoomStatus();
+        showToast(`房间创建成功: ${data.roomId}`);
+        
+        // 生成分享链接
+        const shareLink = `${window.location.origin}${window.location.pathname}?room=${data.roomId}`;
+        document.getElementById('roomShareLink').value = shareLink;
+        
+        closeAllPanels();
+      });
+
+      // 加入房间成功
+      appState.socket.on('room-joined', (data) => {
+        console.log('加入房间成功:', data);
+        appState.roomId = data.roomId;
+        appState.isHost = data.isHost;
+        appState.userName = '用户2';
+        
+        updateRoomStatus();
+        showToast(`成功加入房间: ${data.roomId}`);
+        
+        closeAllPanels();
+      });
+
+      // 加入房间失败
+      appState.socket.on('join-error', (error) => {
+        console.error('加入房间失败:', error);
+        showToast(`加入房间失败: ${error}`);
+      });
+
+      // 成员加入
+      appState.socket.on('member-joined', (data) => {
+        console.log('伴侣加入房间:', data);
+        appState.partnerConnected = true;
+        appState.partnerName = data.member.name;
+        
+        updateRoomStatus();
+        showToast(`${data.member.name} 已加入房间`);
+        
+        // 更新成员列表
+        updateMembersList();
+      });
+
+      // 成员离开
+      appState.socket.on('member-left', (data) => {
+        console.log('伴侣离开房间:', data);
+        appState.partnerConnected = false;
+        
+        updateRoomStatus();
+        showToast('伴侣已离开房间');
+        
+        // 更新成员列表
+        updateMembersList();
+      });
+
+      // 视频播放事件
+      appState.socket.on('video-played', (data) => {
+        if (data.senderId !== appState.socket.id) {
+          console.log('伴侣播放视频:', data);
+          appState.partnerIsPlaying = true;
+          
+          if (appState.settings.autoSync) {
+            video.currentTime = data.currentTime;
+            video.play();
+            appState.isPlaying = true;
+            updateUI();
+          }
+        }
+      });
+
+      // 视频暂停事件
+      appState.socket.on('video-paused', (data) => {
+        if (data.senderId !== appState.socket.id) {
+          console.log('伴侣暂停视频:', data);
+          appState.partnerIsPlaying = false;
+          
+          if (appState.settings.autoSync) {
+            video.currentTime = data.currentTime;
+            video.pause();
+            appState.isPlaying = false;
+            updateUI();
+          }
+        }
+      });
+
+      // 视频跳转事件
+      appState.socket.on('video-seeked', (data) => {
+        if (data.senderId !== appState.socket.id) {
+          console.log('伴侣跳转视频:', data);
+          
+          if (appState.settings.autoSync) {
+            video.currentTime = data.currentTime;
+          }
+        }
+      });
+
+      // 视频URL变更事件
+      appState.socket.on('video-url-changed', (data) => {
+        if (data.senderId !== appState.socket.id) {
+          console.log('伴侣更换视频:', data);
+          
+          if (confirm(`${data.sender} 想要播放新视频: ${data.title || '新视频'}，是否同步？`)) {
+            video.src = data.url;
+            video.load();
+            if (appState.settings.autoplay) {
+              video.play();
+            }
+          }
+        }
+      });
+
+      // 聊天消息
+      appState.socket.on('chat-message-received', (message) => {
+        console.log('收到聊天消息:', message);
+        
+        // 添加消息到界面
+        addMessage(message.sender, message.content, 'received');
+        
+        // 如果聊天面板未打开，增加未读计数
+        if (!chatPanel.classList.contains('open')) {
+          appState.unreadMessages++;
+          updateChatBadge();
+          
+          if (appState.settings.messageNotification) {
+            showToast(`${message.sender}: ${message.content}`);
+          }
+        }
+      });
+
+      // 弹幕消息
+      appState.socket.on('danmaku-received', (danmaku) => {
+        console.log('收到弹幕:', danmaku);
+        createDanmaku(danmaku.sender, danmaku.text, danmaku.color);
+      });
+
+      // 反应表情
+      appState.socket.on('reaction-received', (data) => {
+        console.log('收到反应:', data);
+        receiveReaction(data.reaction);
+      });
+
+      // 同步请求
+      appState.socket.on('sync-request-received', (data) => {
+        console.log('收到同步请求:', data);
+        
+        appState.unreadSyncs++;
+        updateSyncBadge();
+        
+        if (appState.settings.syncNotification) {
+          showToast(`${data.sender} 请求同步`);
+        }
+      });
+
+      // 定期测试延迟
+      setInterval(() => {
+        if (appState.socket && appState.socket.connected) {
+          const start = Date.now();
+          appState.socket.emit('ping', () => {
+            const latency = Date.now() - start;
+            appState.connectionLatency = latency;
+            document.getElementById('connectionLatency').textContent = `${latency}ms`;
+          });
+        }
+      }, 5000);
+    }
+
+    // 更新连接状态
+    function updateConnectionStatus(status, color) {
+      const serverStatus = document.getElementById('serverStatus');
+      serverStatus.textContent = status;
+      
+      connectionStatus.classList.remove('bg-green-500', 'bg-red-500', 'bg-yellow-500');
+      connectionStatus.classList.add(`bg-${color}-500`);
+    }
+
+    // 创建房间
+    function createRoom() {
+      if (!appState.socket || !appState.socket.connected) {
+        showToast('请先连接到服务器');
+        return;
+      }
+
+      appState.socket.emit('create-room', {
+        name: '用户1'
+      });
+    }
+
+    // 加入房间
+    function joinRoom(roomId) {
+      if (!appState.socket || !appState.socket.connected) {
+        showToast('请先连接到服务器');
+        return;
+      }
+
+      if (!roomId) {
+        showToast('请输入房间ID');
+        return;
+      }
+
+      appState.socket.emit('join-room', {
+        roomId: roomId,
+        name: '用户2'
+      });
+    }
+
+    // 离开房间
+    function leaveRoom() {
+      if (appState.socket && appState.roomId) {
+        appState.socket.emit('leave-room', {
+          roomId: appState.roomId
+        });
+        
+        appState.roomId = null;
+        appState.partnerConnected = false;
+        updateRoomStatus();
+        showToast('已离开房间');
+      }
+    }
+
+    // 同步视频状态
+    function syncVideoState() {
+      if (!appState.socket || !appState.roomId || !appState.partnerConnected) {
+        return;
+      }
+
+      const state = {
+        roomId: appState.roomId,
+        currentTime: video.currentTime,
+        isPlaying: appState.isPlaying
+      };
+
+      if (appState.isPlaying) {
+        appState.socket.emit('video-pause', state);
+      } else {
+        appState.socket.emit('video-play', state);
+      }
+    }
+
+    // 发送聊天消息
+    function sendMessage(content) {
+      if (!appState.socket || !appState.roomId || !content.trim()) {
+        return;
+      }
+
+      appState.socket.emit('chat-message', {
+        roomId: appState.roomId,
+        message: content.trim(),
+        sender: appState.userName
+      });
+
+      // 添加到本地消息
+      addMessage(appState.userName, content.trim(), 'sent');
+    }
+
+    // 发送弹幕
+    function sendDanmaku(text, color = '#ffffff') {
+      if (!appState.socket || !appState.roomId) {
+        return;
+      }
+
+      appState.socket.emit('danmaku-send', {
+        roomId: appState.roomId,
+        text: text,
+        sender: appState.userName,
+        color: color
+      });
+
+      // 创建本地弹幕
+      createDanmaku(appState.userName, text, color);
+    }
+
+    // 发送反应表情
+    function sendReaction(reaction) {
+      if (!appState.socket || !appState.roomId || !appState.partnerConnected) {
+        showToast('没有连接到伴侣');
+        return;
+      }
+
+      appState.socket.emit('reaction-send', {
+        roomId: appState.roomId,
+        reaction: reaction,
+        sender: appState.userName
+      });
+
+      // 创建本地动画
+      createHeartAnimation(
+        Math.random() * window.innerWidth,
+        Math.random() * window.innerHeight / 2 + window.innerHeight / 4
+      );
+    }
+
+    // 请求同步
+    function requestSync() {
+      if (!appState.socket || !appState.roomId || !appState.partnerConnected) {
+        showToast('没有连接到伴侣');
+        return;
+      }
+
+      appState.socket.emit('sync-request', {
+        roomId: appState.roomId
+      });
+
+      showToast('已发送同步请求');
+    }
+
+    // 初始化应用
+    function init() {
+      console.log('初始化应用...');
+      
+      // 初始化Socket连接
+      initSocket();
+      
+      // 绑定事件监听器
+      bindEventListeners();
+      
+      // 检查URL参数
+      checkUrlParams();
+      
+      // 显示移动端加载动画
+      showMobileLoader(false);
+      
+      console.log('应用初始化完成');
+    }
+
+    // 绑定事件监听器
+    function bindEventListeners() {
+      // 视频事件
+      video.addEventListener('loadedmetadata', () => {
+        appState.duration = video.duration;
+        durationSpan.textContent = formatTime(video.duration);
+      });
+
+      video.addEventListener('timeupdate', () => {
+        appState.currentTime = video.currentTime;
+        currentTimeSpan.textContent = formatTime(video.currentTime);
+        
+        const progress = (video.currentTime / video.duration) * 100;
+        progressBar.style.width = `${progress}%`;
+        progressHandle.style.left = `${progress}%`;
+      });
+
+      video.addEventListener('play', () => {
+        appState.isPlaying = true;
+        updateUI();
+        syncVideoState();
+      });
+
+      video.addEventListener('pause', () => {
+        appState.isPlaying = false;
+        updateUI();
+        syncVideoState();
+      });
+
+      video.addEventListener('seeked', () => {
+        if (appState.socket && appState.roomId && appState.partnerConnected) {
+          appState.socket.emit('video-seek', {
+            roomId: appState.roomId,
+            currentTime: video.currentTime
+          });
+        }
+      });
+
+      // 播放控制
+      playButton.addEventListener('click', togglePlayPause);
+      playPauseBtn.addEventListener('click', togglePlayPause);
+      
+      // 进度条控制
+      progressContainer.addEventListener('click', (e) => {
+        const rect = progressContainer.getBoundingClientRect();
+        const pos = (e.clientX - rect.left) / rect.width;
+        video.currentTime = pos * video.duration;
+      });
+
+      // 音量控制
+      muteBtn.addEventListener('click', toggleMute);
+      
+      // 面板控制
+      roomBtn.addEventListener('click', () => togglePanel(roomPanel));
+      chatBtn.addEventListener('click', () => togglePanel(chatPanel));
+      moreBtn.addEventListener('click', () => togglePanel(morePanel));
+      danmakuBtn.addEventListener('click', toggleDanmaku);
+      syncBtn.addEventListener('click', requestSync);
+
+      // 关闭面板
+      document.querySelectorAll('.close-panel').forEach(btn => {
+        btn.addEventListener('click', closeAllPanels);
+      });
+      
+      overlay.addEventListener('click', closeAllPanels);
+
+      // 更多功能面板
+      document.getElementById('fullscreenBtn').addEventListener('click', toggleFullscreen);
+      document.getElementById('playlistBtn').addEventListener('click', () => togglePanel(playlistPanel));
+      document.getElementById('settingsBtn').addEventListener('click', () => togglePanel(settingsPanel));
+      document.getElementById('helpBtn').addEventListener('click', () => togglePanel(helpPanel));
+      document.getElementById('leaveBtn').addEventListener('click', leaveRoom);
+
+      // 房间管理
+      document.getElementById('createRoomBtn').addEventListener('click', createRoom);
+      document.getElementById('joinRoomBtn').addEventListener('click', () => {
+        const joinRoomForm = document.getElementById('joinRoomForm');
+        joinRoomForm.classList.toggle('hidden');
+      });
+      
+      document.getElementById('confirmJoinBtn').addEventListener('click', () => {
+        const roomId = document.getElementById('joinRoomId').value.trim();
+        if (roomId) {
+          joinRoom(roomId);
+        }
+      });
+
+      // 分享功能
+      document.getElementById('shareRoomBtn').addEventListener('click', () => {
+        const shareModal = document.getElementById('shareModal');
+        shareModal.classList.toggle('hidden');
+      });
+      
+      document.getElementById('closeShareModal').addEventListener('click', () => {
+        const shareModal = document.getElementById('shareModal');
+        shareModal.classList.add('hidden');
+      });
+      
+      document.getElementById('copyLinkBtn').addEventListener('click', () => {
+        const shareLink = document.getElementById('roomShareLink');
+        shareLink.select();
+        document.execCommand('copy');
+        showToast('链接已复制到剪贴板');
+      });
+
+      // 聊天功能
+      sendMessageBtn.addEventListener('click', () => {
+        const content = messageInput.value.trim();
+        if (content) {
+          sendMessage(content);
+          messageInput.value = '';
+        }
+      });
+
+      messageInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          const content = messageInput.value.trim();
+          if (content) {
+            sendMessage(content);
+            messageInput.value = '';
+          }
+        }
+      });
+
+      // 快速表情
+      document.querySelectorAll('.emoji-button').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const emoji = btn.dataset.emoji;
+          sendMessage(emoji);
+        });
+      });
+
+      // 键盘快捷键
+      document.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT') return;
+        
+        switch(e.code) {
+          case 'Space':
+            e.preventDefault();
+            togglePlayPause();
+            break;
+          case 'ArrowLeft':
+            e.preventDefault();
+            video.currentTime = Math.max(0, video.currentTime - 10);
+            break;
+          case 'ArrowRight':
+            e.preventDefault();
+            video.currentTime = Math.min(video.duration, video.currentTime + 10);
+            break;
+          case 'ArrowUp':
+            e.preventDefault();
+            video.volume = Math.min(1, video.volume + 0.1);
+            break;
+          case 'ArrowDown':
+            e.preventDefault();
+            video.volume = Math.max(0, video.volume - 0.1);
+            break;
+          case 'KeyF':
+            e.preventDefault();
+            toggleFullscreen();
+            break;
+        }
+      });
+
+      // 双击全屏
+      videoContainer.addEventListener('dblclick', toggleFullscreen);
+    }
+
+    // 其他辅助函数
+    function togglePlayPause() {
+      if (video.paused) {
+        video.play();
+      } else {
+        video.pause();
+      }
+    }
+
+    function updateUI() {
+      if (appState.isPlaying) {
+        playPauseBtn.innerHTML = '<i class="fa fa-pause"></i>';
+        videoContainer.classList.remove('paused');
+      } else {
+        playPauseBtn.innerHTML = '<i class="fa fa-play"></i>';
+        videoContainer.classList.add('paused');
+      }
+    }
+
+    function toggleMute() {
+      video.muted = !video.muted;
+      appState.isMuted = video.muted;
+      
+      if (video.muted) {
+        muteBtn.innerHTML = '<i class="fa fa-volume-off"></i>';
+        volumeProgress.style.width = '0%';
+      } else {
+        muteBtn.innerHTML = '<i class="fa fa-volume-up"></i>';
+        volumeProgress.style.width = `${video.volume * 100}%`;
+      }
+    }
+
+    function toggleDanmaku() {
+      appState.isDanmakuEnabled = !appState.isDanmakuEnabled;
+      
+      if (appState.isDanmakuEnabled) {
+        danmakuBtn.innerHTML = '<i class="fa fa-commenting"></i>';
+        showToast('弹幕已开启');
+      } else {
+        danmakuBtn.innerHTML = '<i class="fa fa-commenting-o"></i>';
+        showToast('弹幕已关闭');
+      }
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        videoContainer.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
+    }
+
+    function togglePanel(panel) {
+      if (panel.classList.contains('open')) {
+        closeAllPanels();
+      } else {
+        closeAllPanels();
+        panel.classList.add('open');
+        overlay.classList.add('active');
+        
+        // 重置未读计数
+        if (panel === chatPanel) {
+          appState.unreadMessages = 0;
+          updateChatBadge();
+        }
+      }
+    }
+
+    function closeAllPanels() {
+      morePanel.classList.remove('open');
+      roomPanel.classList.remove('open');
+      chatPanel.classList.remove('open');
+      playlistPanel.classList.remove('open');
+      settingsPanel.classList.remove('open');
+      helpPanel.classList.remove('open');
+      overlay.classList.remove('active');
+    }
+
+    function updateRoomStatus() {
+      if (appState.roomId) {
+        roomStatus.style.opacity = '1';
+        roomId.textContent = appState.roomId;
+        
+        document.getElementById('roomInfoId').textContent = appState.roomId;
+        document.getElementById('roomInfoTime').textContent = new Date().toLocaleString();
+        document.getElementById('roomInfoMembers').textContent = appState.partnerConnected ? '2/2' : '1/2';
+        
+        if (appState.partnerConnected) {
+          connectionStatus.classList.remove('bg-red-500');
+          connectionStatus.classList.add('bg-green-500');
+          partnerStatus.textContent = `${appState.partnerName} 在线`;
+        } else {
+          connectionStatus.classList.remove('bg-green-500');
+          connectionStatus.classList.add('bg-red-500');
+          partnerStatus.textContent = '等待伴侣加入...';
+        }
+      } else {
+        roomStatus.style.opacity = '0';
+      }
+    }
+
+    function updateMembersList() {
+      const membersList = document.getElementById('membersList');
+      membersList.innerHTML = '';
+      
+      // 添加自己
+      const myItem = document.createElement('div');
+      myItem.className = 'flex items-center justify-between p-2 bg-gray-700 rounded';
+      myItem.innerHTML = `
+        <div class="flex items-center">
+          <div class="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-medium mr-3">
+            ${appState.userName.charAt(0)}
+          </div>
+          <div>
+            <p class="text-white font-medium">${appState.userName} (我)</p>
+            <p class="text-xs text-green-400">在线</p>
+          </div>
+        </div>
+      `;
+      membersList.appendChild(myItem);
+      
+      // 添加伴侣
+      if (appState.partnerConnected) {
+        const partnerItem = document.createElement('div');
+        partnerItem.className = 'flex items-center justify-between p-2 bg-gray-700 rounded';
+        partnerItem.innerHTML = `
+          <div class="flex items-center">
+            <div class="w-8 h-8 bg-secondary rounded-full flex items-center justify-center text-white text-sm font-medium mr-3">
+              ${appState.partnerName.charAt(0)}
+            </div>
+            <div>
+              <p class="text-white font-medium">${appState.partnerName}</p>
+              <p class="text-xs text-green-400">在线</p>
+            </div>
+          </div>
+        `;
+        membersList.appendChild(partnerItem);
+      }
+    }
+
+    function updateChatBadge() {
+      const badge = chatBtn.querySelector('span');
+      
+      if (appState.unreadMessages > 0) {
+        badge.textContent = appState.unreadMessages;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+
+    function updateSyncBadge() {
+      const badge = syncBtn.querySelector('span');
+      
+      if (appState.unreadSyncs > 0) {
+        badge.textContent = appState.unreadSyncs;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+
+    function addMessage(sender, content, type) {
+      const messageDiv = document.createElement('div');
+      messageDiv.className = `message ${type}`;
+      messageDiv.innerHTML = `<p>${content}</p>`;
+      
+      messagesContainer.appendChild(messageDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      
+      // 生成弹幕
+      if (appState.isDanmakuEnabled) {
+        sendDanmaku(content, '#ffffff');
+      }
+    }
+
+    function createDanmaku(sender, text, color = '#ffffff') {
+      const danmaku = document.createElement('div');
+      danmaku.className = 'danmaku';
+      danmaku.textContent = `${sender}: ${text}`;
+      danmaku.style.color = color;
+      danmaku.style.top = Math.random() * 80 + '%';
+      danmaku.style.animationDuration = (8 + Math.random() * 4) + 's';
+      danmaku.style.animationName = 'danmakuMove';
+      
+      danmakuContainer.appendChild(danmaku);
+      
+      // 移除弹幕
+      setTimeout(() => {
+        if (danmaku.parentNode) {
+          danmaku.parentNode.removeChild(danmaku);
+        }
+      }, 12000);
+    }
+
+    function receiveReaction(reaction) {
+      createHeartAnimation(
+        Math.random() * window.innerWidth,
+        Math.random() * window.innerHeight / 2 + window.innerHeight / 4
+      );
+      
+      showToast(`收到 ${reaction}！`);
+    }
+
+    function createHeartAnimation(x, y) {
+      const heart = document.createElement('div');
+      heart.className = 'heart-animation';
+      heart.textContent = '❤️';
+      heart.style.left = x + 'px';
+      heart.style.top = y + 'px';
+      
+      heartsContainer.appendChild(heart);
+      
+      setTimeout(() => {
+        if (heart.parentNode) {
+          heart.parentNode.removeChild(heart);
+        }
+      }, 1500);
+    }
+
+    function showToast(message, duration = 3000) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+      
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, duration);
+    }
+
+    function formatTime(seconds) {
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = Math.floor(seconds % 60);
+      return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+    }
+
+    function checkUrlParams() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const roomId = urlParams.get('room');
+      
+      if (roomId) {
+        // 自动加入房间
+        setTimeout(() => {
+          joinRoom(roomId);
+        }, 1000);
+      }
+    }
+
+    function showMobileLoader(show) {
+      if (show) {
+        mobileLoader.classList.remove('hidden');
+      } else {
+        mobileLoader.classList.add('hidden');
+      }
+    }
+
+    // 初始化应用
+    document.addEventListener('DOMContentLoaded', init);
+
+    // 全局函数供HTML调用
+    window.sendReaction = sendReaction;
+    window.createRoom = createRoom;
+    window.joinRoom = joinRoom;
+    window.leaveRoom = leaveRoom;
