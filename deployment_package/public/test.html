@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>情侣同步观影 - 测试页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 20px 0;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .connected { background: #4CAF50; }
+        .disconnected { background: #f44336; }
+        .log {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+            padding: 10px;
+            margin: 10px 0;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        input {
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            margin: 5px;
+            width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 情侣同步观影 - 本地测试</h1>
+        
+        <div id="connectionStatus" class="status disconnected">未连接到服务器</div>
+        
+        <div>
+            <h3>连接测试</h3>
+            <button onclick="connectToServer()">连接服务器</button>
+            <button onclick="disconnectFromServer()">断开连接</button>
+        </div>
+        
+        <div>
+            <h3>房间测试</h3>
+            <input type="text" id="roomId" placeholder="房间ID">
+            <button onclick="createRoom()">创建房间</button>
+            <button onclick="joinRoom()">加入房间</button>
+            <button onclick="leaveRoom()">离开房间</button>
+        </div>
+        
+        <div>
+            <h3>消息测试</h3>
+            <input type="text" id="messageInput" placeholder="输入消息">
+            <button onclick="sendMessage()">发送消息</button>
+        </div>
+        
+        <div>
+            <h3>视频同步测试</h3>
+            <button onclick="syncPlay()">播放视频</button>
+            <button onclick="syncPause()">暂停视频</button>
+            <button onclick="syncSeek()">跳转视频 (10s)</button>
+        </div>
+        
+        <div>
+            <h3>日志</h3>
+            <div id="log" class="log"></div>
+            <button onclick="clearLog()">清空日志</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script>
+        let socket = null;
+        let currentRoomId = null;
+        
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}<br>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function updateConnectionStatus(connected) {
+            const statusDiv = document.getElementById('connectionStatus');
+            if (connected) {
+                statusDiv.className = 'status connected';
+                statusDiv.textContent = '已连接到服务器';
+            } else {
+                statusDiv.className = 'status disconnected';
+                statusDiv.textContent = '未连接到服务器';
+            }
+        }
+        
+        function connectToServer() {
+            if (socket && socket.connected) {
+                log('已经连接到服务器');
+                return;
+            }
+            
+            socket = io('http://localhost:3001');
+            
+            socket.on('connect', function() {
+                log('✅ 连接到服务器成功');
+                updateConnectionStatus(true);
+            });
+            
+            socket.on('disconnect', function() {
+                log('❌ 与服务器断开连接');
+                updateConnectionStatus(false);
+            });
+            
+            socket.on('room-created', function(data) {
+                log(`🏠 房间创建成功: ${data.roomId}`);
+                currentRoomId = data.roomId;
+                document.getElementById('roomId').value = data.roomId;
+            });
+            
+            socket.on('room-joined', function(data) {
+                log(`✅ 成功加入房间: ${data.roomId}`);
+                currentRoomId = data.roomId;
+            });
+            
+            socket.on('join-error', function(error) {
+                log(`❌ 加入房间失败: ${error}`);
+            });
+            
+            socket.on('chat-message-received', function(message) {
+                log(`💬 收到消息: ${message.sender}: ${message.content}`);
+            });
+            
+            socket.on('video-played', function(data) {
+                log(`▶️ 收到播放指令 (时间: ${data.currentTime.toFixed(1)}s)`);
+            });
+            
+            socket.on('video-paused', function(data) {
+                log(`⏸️ 收到暂停指令 (时间: ${data.currentTime.toFixed(1)}s)`);
+            });
+            
+            socket.on('video-seeked', function(data) {
+                log(`🔄 收到跳转指令 (时间: ${data.currentTime.toFixed(1)}s)`);
+            });
+        }
+        
+        function disconnectFromServer() {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+                log('🔌 手动断开连接');
+                updateConnectionStatus(false);
+            }
+        }
+        
+        function createRoom() {
+            if (!socket || !socket.connected) {
+                log('❌ 请先连接到服务器');
+                return;
+            }
+            socket.emit('create-room', { name: '测试用户' });
+        }
+        
+        function joinRoom() {
+            if (!socket || !socket.connected) {
+                log('❌ 请先连接到服务器');
+                return;
+            }
+            const roomId = document.getElementById('roomId').value;
+            if (!roomId) {
+                log('❌ 请输入房间ID');
+                return;
+            }
+            socket.emit('join-room', { roomId: roomId, name: '测试用户2' });
+        }
+        
+        function leaveRoom() {
+            if (!socket || !socket.connected) {
+                log('❌ 请先连接到服务器');
+                return;
+            }
+            if (!currentRoomId) {
+                log('❌ 当前不在任何房间');
+                return;
+            }
+            socket.emit('leave-room', { roomId: currentRoomId });
+            log(`🚪 离开房间: ${currentRoomId}`);
+            currentRoomId = null;
+        }
+        
+        function sendMessage() {
+            if (!socket || !socket.connected) {
+                log('❌ 请先连接到服务器');
+                return;
+            }
+            if (!currentRoomId) {
+                log('❌ 请先加入房间');
+                return;
+            }
+            const message = document.getElementById('messageInput').value;
+            if (!message) {
+                log('❌ 请输入消息内容');
+                return;
+            }
+            socket.emit('chat-message', {
+                roomId: currentRoomId,
+                message: message,
+                sender: '测试用户'
+            });
+            document.getElementById('messageInput').value = '';
+        }
+        
+        function syncPlay() {
+            if (!socket || !socket.connected) {
+                log('❌ 请先连接到服务器');
+                return;
+            }
+            if (!currentRoomId) {
+                log('❌ 请先加入房间');
+                return;
+            }
+            socket.emit('video-play', {
+                roomId: currentRoomId,
+                currentTime: 10.0
+            });
+            log('📤 发送播放指令');
+        }
+        
+        function syncPause() {
+            if (!socket || !socket.connected) {
+                log('❌ 请先连接到服务器');
+                return;
+            }
+            if (!currentRoomId) {
+                log('❌ 请先加入房间');
+                return;
+            }
+            socket.emit('video-pause', {
+                roomId: currentRoomId,
+                currentTime: 15.0
+            });
+            log('📤 发送暂停指令');
+        }
+        
+        function syncSeek() {
+            if (!socket || !socket.connected) {
+                log('❌ 请先连接到服务器');
+                return;
+            }
+            if (!currentRoomId) {
+                log('❌ 请先加入房间');
+                return;
+            }
+            socket.emit('video-seek', {
+                roomId: currentRoomId,
+                currentTime: 10.0
+            });
+            log('📤 发送跳转指令');
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+        
+        // 页面加载时自动连接
+        window.onload = function() {
+            log('🚀 测试页面加载完成');
+        };
+    </script>
+</body>
+</html>
